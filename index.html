@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Frame Player</title>
+
   <style>
     html, body {
       margin: 0;
@@ -12,11 +13,13 @@
       background: #000;
       overflow: hidden;
     }
+
     body {
       display: flex;
       align-items: center;
       justify-content: center;
     }
+
     img {
       width: 100vw;
       height: 100vh;
@@ -25,15 +28,40 @@
       user-select: none;
       -webkit-user-drag: none;
     }
+
     #startScreen {
       position: fixed;
       inset: 0;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: rgba(0, 0, 0, 0.85);
+      gap: 20px;
+      background: rgba(0, 0, 0, 0.92);
       z-index: 10;
+      color: white;
+      font-family: Arial, sans-serif;
     }
+
+    #loadingText {
+      font-size: 1.2rem;
+    }
+
+    #progressBar {
+      width: min(500px, 80vw);
+      height: 12px;
+      background: #333;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    #progress {
+      width: 0%;
+      height: 100%;
+      background: white;
+      transition: width 0.1s linear;
+    }
+
     #startButton {
       font-size: 1.2rem;
       padding: 14px 24px;
@@ -43,14 +71,28 @@
       background: #fff;
       color: #000;
     }
+
+    #startButton:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
   </style>
 </head>
+
 <body>
+
   <div id="startScreen">
-    <button id="startButton">Start</button>
+    <div id="loadingText">Loading frames... 0 / 13149</div>
+
+    <div id="progressBar">
+      <div id="progress"></div>
+    </div>
+
+    <button id="startButton" disabled>Start</button>
   </div>
 
   <img id="frame" alt="frame" />
+
   <audio id="music" src="badapple.mp3" preload="auto"></audio>
 
   <script>
@@ -60,50 +102,145 @@
     const fps = 60;
     const maxFrames = 13149;
 
+    // Number of images to load at the same time.
+    // Increase this for faster loading, decrease it if your connection struggles.
+    const preloadBatchSize = 25;
+
     let started = false;
     let lastFrameShown = -1;
 
     const img = document.getElementById("frame");
     const music = document.getElementById("music");
+
     const startScreen = document.getElementById("startScreen");
     const startButton = document.getElementById("startButton");
+
+    const loadingText = document.getElementById("loadingText");
+    const progress = document.getElementById("progress");
+
 
     function padFrame(n) {
       return String(n);
     }
 
-    function showFrame(frameNumber) {
-      if (frameNumber === lastFrameShown) return;
-      lastFrameShown = frameNumber;
-      img.src = `${baseUrl}${padFrame(frameNumber)}${extension}`;
+
+    function frameUrl(frameNumber) {
+      return `${baseUrl}${padFrame(frameNumber)}${extension}`;
     }
 
-    function tick() {
-      if (!started) return;
 
-      const frameNumber = Math.floor(music.currentTime * fps) + 1;
-      if (frameNumber <= maxFrames) {
-        showFrame(frameNumber);
+    function showFrame(frameNumber) {
+      if (frameNumber === lastFrameShown) {
+        return;
       }
 
-      requestAnimationFrame(tick);
+      lastFrameShown = frameNumber;
+      img.src = frameUrl(frameNumber);
     }
+
+
+    /*
+      Preload all frames in batches.
+
+      We intentionally do NOT keep references to all Image objects.
+      This lets the browser manage the downloaded data through its cache
+      instead of forcing every decoded image to remain in JavaScript memory.
+    */
+    async function preloadFrames() {
+      let loaded = 0;
+
+      for (let start = 1; start <= maxFrames; start += preloadBatchSize) {
+        const end = Math.min(start + preloadBatchSize - 1, maxFrames);
+
+        const promises = [];
+
+        for (let frame = start; frame <= end; frame++) {
+          promises.push(
+            new Promise((resolve) => {
+              const image = new Image();
+
+              image.onload = () => {
+                loaded++;
+
+                loadingText.textContent =
+                  `Loading frames... ${loaded.toLocaleString()} / ${maxFrames.toLocaleString()}`;
+
+                progress.style.width =
+                  `${(loaded / maxFrames) * 100}%`;
+
+                resolve();
+              };
+
+              image.onerror = () => {
+                console.warn(`Failed to preload frame ${frame}`);
+
+                // Don't completely stop playback if one frame fails.
+                loaded++;
+
+                loadingText.textContent =
+                  `Loading frames... ${loaded.toLocaleString()} / ${maxFrames.toLocaleString()}`;
+
+                progress.style.width =
+                  `${(loaded / maxFrames) * 100}%`;
+
+                resolve();
+              };
+
+              image.src = frameUrl(frame);
+            })
+          );
+        }
+
+        await Promise.all(promises);
+      }
+
+      loadingText.textContent = "All frames loaded!";
+
+      startButton.disabled = false;
+      startButton.textContent = "Start";
+    }
+
+
+    function tick() {
+      if (!started) {
+        return;
+      }
+
+      const frameNumber =
+        Math.floor(music.currentTime * fps) + 1;
+
+      if (frameNumber <= maxFrames) {
+        showFrame(frameNumber);
+        requestAnimationFrame(tick);
+      }
+    }
+
 
     async function startPlayback() {
       started = true;
+
       startButton.disabled = true;
       startScreen.style.display = "none";
 
       try {
         await music.play();
       } catch (err) {
-        console.warn("Audio could not start automatically:", err);
+        console.warn(
+          "Audio could not start automatically:",
+          err
+        );
       }
 
       requestAnimationFrame(tick);
     }
 
+
     startButton.addEventListener("click", startPlayback);
+
+
+    // Begin preloading immediately.
+    preloadFrames();
   </script>
+
 </body>
 </html>
