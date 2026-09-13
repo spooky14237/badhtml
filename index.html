@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Frame Player</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    img {
+      width: 100vw;
+      height: 100vh;
+      object-fit: contain;
+      image-rendering: auto;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+    #startScreen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 10;
+    }
+    #startButton {
+      font-size: 1.2rem;
+      padding: 14px 24px;
+      border: 0;
+      border-radius: 12px;
+      cursor: pointer;
+      background: #fff;
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+  <div id="startScreen">
+    <button id="startButton">Start</button>
+  </div>
+
+  <img id="frame" alt="frame" />
+  <audio id="music" src="badapple.mp3" preload="auto"></audio>
+
+  <script>
+    const baseUrl = "frames/frame_";
+    const extension = ".png";
+
+    const fps = 60;
+    const maxFrames = 13149;
+
+    let started = false;
+    let lastFrameShown = -1;
+
+    const img = document.getElementById("frame");
+    const music = document.getElementById("music");
+    const startScreen = document.getElementById("startScreen");
+    const startButton = document.getElementById("startButton");
+
+    function padFrame(n) {
+      return String(n);
+    }
+
+    function showFrame(frameNumber) {
+      if (frameNumber === lastFrameShown) return;
+      lastFrameShown = frameNumber;
+      img.src = `${baseUrl}${padFrame(frameNumber)}${extension}`;
+    }
+
+    function tick() {
+      if (!started) return;
+
+      const frameNumber = Math.floor(music.currentTime * fps) + 1;
+      if (frameNumber <= maxFrames) {
+        showFrame(frameNumber);
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    async function startPlayback() {
+      started = true;
+      startButton.disabled = true;
+      startScreen.style.display = "none";
+
+      try {
+        await music.play();
+      } catch (err) {
+        console.warn("Audio could not start automatically:", err);
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    startButton.addEventListener("click", startPlayback);
+  </script>
+</body>
+</html>
